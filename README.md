@@ -48,28 +48,30 @@ wageslave setup --host github-public
 
 ## Usage
 
-Only commands that talk to GitHub need wageslave. Local git commands (`add`, `commit`, `status`, etc.) should use plain `git`.
+A typical workflow only needs `pull`, `push`, and `gh`. Everything else is plain `git`:
 
 ```bash
-# Clone a personal repo
 wageslave gh repo clone youruser/project
 cd project
 
-# Pull/fetch — runs on host via HTTPS, no container needed
-wageslave pull
-wageslave fetch
+# work...
+git add -A
+git commit -m "Add feature"
 
-# Push — needs SSH credentials, runs in container
 wageslave push
-
-# GitHub CLI
-wageslave gh repo create my-project --private
 wageslave gh pr create --title "Add feature"
-wageslave gh pr list
-
-# Interactive shell inside the container
-wageslave shell
 ```
+
+### Commands
+
+| Command | Runs in container? | Notes |
+|---------|-------------------|-------|
+| `wageslave pull` | No | Fetches via HTTPS on host |
+| `wageslave fetch` | No | Fetches via HTTPS on host |
+| `wageslave push` | Yes | Needs SSH credentials |
+| `wageslave gh <args>` | Yes | GitHub CLI (PRs, releases, etc.) |
+| `wageslave git <args>` | Yes | Escape hatch for any git command |
+| `wageslave shell` | Yes | Interactive bash in the container |
 
 ## Configuration
 
