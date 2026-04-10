@@ -1,6 +1,7 @@
 """CLI entry point for wageslave."""
 
 import sys
+from pathlib import Path
 
 from wageslave import config, docker
 
@@ -12,6 +13,7 @@ Commands:
   git <args>     Run git with personal credentials
   gh <args>      Run GitHub CLI with personal credentials
   shell          Open an interactive shell in the container
+  install-skill  Install Claude Code skill to ~/.claude/skills/
 
 Examples:
   wageslave setup
@@ -69,6 +71,18 @@ def cmd_shell() -> int:
     )
 
 
+def cmd_install_skill() -> None:
+    import shutil
+    from importlib.resources import files
+
+    src = files("wageslave").joinpath("skill")
+    dest = Path.home() / ".claude" / "skills" / "wageslave"
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(str(src), dest)
+    print(f"Installed skill to {dest}")
+
+
 def cmd_setup(args: list[str]) -> None:
     from wageslave.setup import run_setup
 
@@ -92,6 +106,8 @@ def main() -> None:
 
     if command == "setup":
         cmd_setup(rest)
+    elif command == "install-skill":
+        cmd_install_skill()
     elif command == "git":
         sys.exit(cmd_git(rest))
     elif command == "gh":
