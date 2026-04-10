@@ -63,7 +63,7 @@ Only commands that talk to GitHub need wageslave. Local git commands (`add`, `co
 
 ```bash
 # Clone a personal repo
-wageslave git clone git@github.com:youruser/project.git
+wageslave gh repo clone youruser/project
 cd project
 
 # Push/pull (needs SSH credentials)
