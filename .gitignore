@@ -20,6 +20,7 @@ venv/
 # IDE
 .idea/
 .vscode/
+.claude/
 *.swp
 
 # Testing
