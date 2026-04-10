@@ -46,16 +46,23 @@ def cmd_git(args: list[str]) -> int:
 def cmd_gh(args: list[str]) -> int:
     config.check_setup()
     docker.ensure_image()
-    # gh auth commands need writable config
-    writable = len(args) > 0 and args[0] == "auth"
-    if writable:
+    is_auth = len(args) > 0 and args[0] == "auth"
+    if is_auth:
         config.gh_dir().mkdir(parents=True, exist_ok=True)
+    # For 'gh auth login', add defaults to reduce noise
+    gh_args = list(args)
+    if len(args) >= 2 and args[0] == "auth" and args[1] == "login":
+        if "--git-protocol" not in args:
+            gh_args += ["--git-protocol", "ssh"]
+        if "--skip-ssh-key" not in args:
+            gh_args += ["--skip-ssh-key"]
     return docker.run(
-        ["gh", *args],
+        ["gh", *gh_args],
         ssh_dir=config.ssh_dir(),
         gh_dir=config.gh_dir(),
         gitconfig=config.gitconfig(),
-        writable_gh=writable,
+        writable_gh=is_auth,
+        writable_gitconfig=is_auth,
     )
 
 

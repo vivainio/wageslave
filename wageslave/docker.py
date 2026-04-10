@@ -39,6 +39,7 @@ def run(
     gitconfig: Path | None = None,
     workdir: Path | None = None,
     writable_gh: bool = False,
+    writable_gitconfig: bool = False,
     interactive: bool = True,
     entrypoint: str | None = None,
 ) -> int:
@@ -74,7 +75,8 @@ def run(
         args += ["-v", f"{gh_dir}:{home}/.config/gh:{mode}"]
 
     if gitconfig and gitconfig.exists():
-        args += ["-v", f"{gitconfig}:{home}/.gitconfig:ro"]
+        mode = "rw" if writable_gitconfig else "ro"
+        args += ["-v", f"{gitconfig}:{home}/.gitconfig:{mode}"]
 
     args += ["--workdir", "/workspace"]
 
