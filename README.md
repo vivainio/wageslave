@@ -31,6 +31,7 @@ uv tool install wageslave
 ```bash
 wageslave setup
 wageslave gh auth login
+wageslave install-skill   # optional: Claude Code skill
 ```
 
 Setup auto-detects existing credentials or creates new ones:
