@@ -7,9 +7,11 @@ description: Run git/gh commands with personal GitHub credentials inside a Podma
 
 CLI for using personal GitHub credentials safely from a company computer via Podman containers.
 
+**wageslave is ONLY for public/personal GitHub repositories.** Never use it for company/work repositories — those use the normal git/gh workflow with corporate credentials.
+
 ## When to use wageslave
 
-Only use `wageslave` for commands that talk to GitHub over the network:
+Only use `wageslave` for commands that talk to **personal** GitHub over the network:
 
 ```bash
 wageslave git push
@@ -23,7 +25,8 @@ wageslave gh release create v0.1.0 --generate-notes
 
 ## When NOT to use wageslave
 
-Local git commands do NOT need wageslave. Use plain `git` instead:
+- **Company/work repositories** — use plain `git` and `gh` with corporate credentials
+- **Local git commands** — do NOT need wageslave. Use plain `git` instead:
 
 ```bash
 git add -A
