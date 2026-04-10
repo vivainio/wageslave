@@ -61,6 +61,8 @@ def run(
         f"HOME={home}",
         "--env",
         f"GIT_SSH_COMMAND={ssh_cmd}",
+        "--env",
+        "BROWSER=echo",
     ]
 
     if interactive and sys.stdin.isatty():
