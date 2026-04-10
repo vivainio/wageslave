@@ -48,30 +48,38 @@ wageslave setup --host github-public
 
 ## Usage
 
-A typical workflow only needs `pull`, `push`, and `gh`. Everything else is plain `git`:
+The two core commands run git and gh inside the container with your personal credentials:
+
+```bash
+wageslave git push origin main
+wageslave gh pr create --title "Add feature"
+```
+
+For common operations there are shortcuts that avoid spinning up a container when possible:
+
+| Command | Container? | Description |
+|---------|-----------|-------------|
+| `wageslave pull` | No | Git pull via HTTPS on host |
+| `wageslave fetch` | No | Git fetch via HTTPS on host |
+| `wageslave push` | Yes | Git push (needs SSH key) |
+| `wageslave git <args>` | Yes | Any git command |
+| `wageslave gh <args>` | Yes | Any GitHub CLI command |
+| `wageslave shell` | Yes | Interactive bash |
+
+### Typical workflow
 
 ```bash
 wageslave gh repo clone youruser/project
 cd project
 
-# work...
+# work locally with plain git
 git add -A
 git commit -m "Add feature"
 
+# push and create PR through wageslave
 wageslave push
 wageslave gh pr create --title "Add feature"
 ```
-
-### Commands
-
-| Command | Runs in container? | Notes |
-|---------|-------------------|-------|
-| `wageslave pull` | No | Fetches via HTTPS on host |
-| `wageslave fetch` | No | Fetches via HTTPS on host |
-| `wageslave push` | Yes | Needs SSH credentials |
-| `wageslave gh <args>` | Yes | GitHub CLI (PRs, releases, etc.) |
-| `wageslave git <args>` | Yes | Escape hatch for any git command |
-| `wageslave shell` | Yes | Interactive bash in the container |
 
 ## Configuration
 
