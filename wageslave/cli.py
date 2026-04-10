@@ -1,5 +1,7 @@
 """CLI entry point for wageslave."""
 
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -10,21 +12,62 @@ Usage: wageslave <command> [args...]
 
 Commands:
   setup          First-time setup (SSH key, git config, build image)
-  git <args>     Run git with personal credentials
-  gh <args>      Run GitHub CLI with personal credentials
+  pull [args]    Git pull via HTTPS (no container needed)
+  fetch [args]   Git fetch via HTTPS (no container needed)
+  push [args]    Git push via container (needs SSH credentials)
+  git <args>     Run any git command in the container
+  gh <args>      Run GitHub CLI in the container
   shell          Open an interactive shell in the container
   install-skill  Install Claude Code skill to ~/.claude/skills/
 
 Examples:
   wageslave setup
-  wageslave git clone git@github.com:you/repo.git
-  wageslave git push origin main
+  wageslave push
+  wageslave pull
   wageslave gh repo create my-project --private
   wageslave gh pr create --title 'Fix bug'
 """
 
 
 REMOTE_GIT_COMMANDS = {"push", "pull", "fetch", "clone", "ls-remote"}
+
+
+def _ssh_remote_to_https(remote: str = "origin") -> str | None:
+    """Convert an SSH remote URL to HTTPS. Returns None if not an SSH URL."""
+    result = subprocess.run(
+        ["git", "remote", "get-url", remote],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    url = result.stdout.strip()
+    # git@github.com:user/repo.git -> https://github.com/user/repo.git
+    m = re.match(r"git@([^:]+):(.+)", url)
+    if m:
+        return f"https://{m.group(1)}/{m.group(2)}"
+    return None
+
+
+def cmd_pull_or_fetch(git_cmd: str, args: list[str]) -> int:
+    """Run git pull/fetch using HTTPS URL directly on host (no container)."""
+    https_url = _ssh_remote_to_https()
+    if https_url:
+        return subprocess.run(["git", git_cmd, https_url, *args]).returncode
+    # Fallback to container if not an SSH remote
+    return cmd_git([git_cmd, *args])
+
+
+def cmd_push(args: list[str]) -> int:
+    """Git push always needs the container for SSH credentials."""
+    config.check_setup()
+    docker.ensure_image()
+    return docker.run(
+        ["git", "push", *args],
+        ssh_dir=config.ssh_dir(),
+        gh_dir=config.gh_dir(),
+        gitconfig=config.gitconfig(),
+    )
 
 
 def cmd_git(args: list[str]) -> int:
@@ -115,6 +158,12 @@ def main() -> None:
         cmd_setup(rest)
     elif command == "install-skill":
         cmd_install_skill()
+    elif command == "pull":
+        sys.exit(cmd_pull_or_fetch("pull", rest))
+    elif command == "fetch":
+        sys.exit(cmd_pull_or_fetch("fetch", rest))
+    elif command == "push":
+        sys.exit(cmd_push(rest))
     elif command == "git":
         sys.exit(cmd_git(rest))
     elif command == "gh":
