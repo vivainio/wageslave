@@ -1,15 +1,15 @@
 # wageslave
 
-Use your personal GitHub account from a company computer without installing personal SSH keys or tokens on the host. Everything runs inside a Docker container.
+Use your personal GitHub account from a company computer without installing personal SSH keys or tokens on the host. Everything runs inside a Podman container.
 
 ## How it works
 
 ```
-Host machine                    Docker container
+Host machine                    Podman container
 ─────────────                   ─────────────────
-~/.config/wageslave/ssh/  ──▶   /root/.ssh/ (read-only)
-~/.config/wageslave/gh/   ──▶   /root/.config/gh/ (read-only)
-~/.config/wageslave/gitconfig ▶ /root/.gitconfig (read-only)
+~/.config/wageslave/ssh/  ──▶   ~/.ssh/ (read-only)
+~/.config/wageslave/gh/   ──▶   ~/.config/gh/ (read-only)
+~/.config/wageslave/gitconfig ▶ ~/.gitconfig (read-only)
 $(pwd)                    ──▶   /workspace (read-write)
 ```
 
@@ -18,7 +18,7 @@ Your personal credentials never touch `~/.ssh` or `~/.gitconfig` on the host. Th
 ## Prerequisites
 
 - Python 3.11+
-- Docker
+- Podman
 - An SSH key for GitHub in `~/.ssh/` with a matching entry in `~/.ssh/config`:
 
 ```
@@ -31,11 +31,7 @@ Host github-public
 ## Install
 
 ```bash
-pip install wageslave
-# or from source:
-git clone https://github.com/vivainio/wageslave.git
-cd wageslave
-uv sync
+uv tool install wageslave
 ```
 
 ## Setup
@@ -49,7 +45,7 @@ This auto-detects your existing credentials:
 1. **SSH key** — finds the GitHub IdentityFile from `~/.ssh/config`
 2. **Git identity** — reads `user.name` and `user.email` from global git config
 3. **known_hosts** — runs `ssh-keyscan github.com`
-4. **Docker image** — builds the Alpine-based container with git, ssh, and gh
+4. **Podman image** — builds the Alpine-based container with git, ssh, and gh
 
 If you have multiple GitHub hosts in `~/.ssh/config`, setup will list them and ask you to pick one:
 
@@ -65,16 +61,16 @@ wageslave gh auth login
 
 ## Usage
 
+Only commands that talk to GitHub need wageslave. Local git commands (`add`, `commit`, `status`, etc.) should use plain `git`.
+
 ```bash
 # Clone a personal repo
 wageslave git clone git@github.com:youruser/project.git
 cd project
 
-# Normal git workflow
-wageslave git status
-wageslave git add -A
-wageslave git commit -m "fix: thing"
+# Push/pull (needs SSH credentials)
 wageslave git push
+wageslave git pull
 
 # GitHub CLI
 wageslave gh repo create my-project --private
