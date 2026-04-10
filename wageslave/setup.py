@@ -91,6 +91,17 @@ def run_setup(host: str | None = None) -> None:
             shutil.copy2(pub, dest_key.with_suffix(".pub"))
         print(f"ssh: copied {src.name} (from Host {entry.host})")
 
+    # GitHub known_hosts — mounted ssh dir replaces the baked-in one
+    known_hosts = ssh / "known_hosts"
+    if not known_hosts.exists():
+        subprocess.run(
+            ["ssh-keyscan", "github.com"],
+            stdout=open(known_hosts, "w"),
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        print("ssh: added github.com to known_hosts")
+
     # Git identity
     if not gitcfg.exists():
         name = _git_config_global("user.name")
@@ -98,7 +109,10 @@ def run_setup(host: str | None = None) -> None:
         if not name or not email:
             print("No git user.name/user.email in global config", file=sys.stderr)
             sys.exit(1)
-        gitcfg.write_text(f"[user]\n    name = {name}\n    email = {email}\n")
+        gitcfg.write_text(
+            f"[user]\n    name = {name}\n    email = {email}\n"
+            f"[safe]\n    directory = /workspace\n"
+        )
         print(f"git: {name} <{email}>")
 
     # gh CLI auth — user must run `wageslave gh auth login` manually
