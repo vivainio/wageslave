@@ -44,21 +44,33 @@ def run(
 ) -> int:
     """Run a command inside the wageslave container."""
     work = workdir or Path.cwd()
-    args: list[str] = [RUNTIME, "run", "--rm"]
+    # --userns=keep-id maps host uid into container so mounted files are owned correctly.
+    # We set HOME and GIT_SSH_COMMAND explicitly since the uid has no passwd entry.
+    home = "/home/user"
+    ssh_cmd = (
+        f"ssh -i {home}/.ssh/id_ed25519 -o IdentitiesOnly=yes"
+        f" -o UserKnownHostsFile={home}/.ssh/known_hosts"
+    )
+    args: list[str] = [
+        RUNTIME, "run", "--rm",
+        "--userns=keep-id",
+        "--env", f"HOME={home}",
+        "--env", f"GIT_SSH_COMMAND={ssh_cmd}",
+    ]
 
     if interactive and sys.stdin.isatty():
         args += ["-it"]
 
     # Mounts
-    args += ["-v", f"{ssh_dir}:/root/.ssh:ro"]
+    args += ["-v", f"{ssh_dir}:{home}/.ssh:ro"]
     args += ["-v", f"{work}:/workspace"]
 
     if gh_dir and gh_dir.exists():
         mode = "rw" if writable_gh else "ro"
-        args += ["-v", f"{gh_dir}:/root/.config/gh:{mode}"]
+        args += ["-v", f"{gh_dir}:{home}/.config/gh:{mode}"]
 
     if gitconfig and gitconfig.exists():
-        args += ["-v", f"{gitconfig}:/root/.gitconfig:ro"]
+        args += ["-v", f"{gitconfig}:{home}/.gitconfig:ro"]
 
     args += ["--workdir", "/workspace"]
 
