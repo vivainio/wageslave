@@ -67,7 +67,7 @@ def cmd_setup(args: list[str]) -> None:
     host = None
     if len(args) >= 2 and args[0] == "--host":
         host = args[1]
-    elif len(args) == 1 and args[0].startswith("--host="):
+    elif len(args) >= 1 and args[0].startswith("--host="):
         host = args[0].split("=", 1)[1]
 
     run_setup(host=host)

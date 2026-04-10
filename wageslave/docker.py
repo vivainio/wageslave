@@ -1,4 +1,4 @@
-"""Docker container management for wageslave."""
+"""Container management for wageslave (Podman)."""
 
 import subprocess
 import sys
@@ -6,11 +6,12 @@ from importlib.resources import files
 from pathlib import Path
 
 IMAGE_NAME = "wageslave"
+RUNTIME = "podman"
 
 
 def image_exists() -> bool:
     result = subprocess.run(
-        ["docker", "image", "inspect", IMAGE_NAME],
+        [RUNTIME, "image", "inspect", IMAGE_NAME],
         capture_output=True,
     )
     return result.returncode == 0
@@ -18,16 +19,15 @@ def image_exists() -> bool:
 
 def build_image() -> None:
     dockerfile = files("wageslave").joinpath("Dockerfile")
-    # Copy Dockerfile to a temp context dir isn't needed — use stdin + empty context
     subprocess.run(
-        ["docker", "build", "-t", IMAGE_NAME, "-f", str(dockerfile), str(dockerfile.parent)],
+        [RUNTIME, "build", "-t", IMAGE_NAME, "-f", str(dockerfile), str(dockerfile.parent)],
         check=True,
     )
 
 
 def ensure_image() -> None:
     if not image_exists():
-        print("wageslave: building docker image...", file=sys.stderr)
+        print("wageslave: building container image...", file=sys.stderr)
         build_image()
 
 
@@ -44,7 +44,7 @@ def run(
 ) -> int:
     """Run a command inside the wageslave container."""
     work = workdir or Path.cwd()
-    args: list[str] = ["docker", "run", "--rm"]
+    args: list[str] = [RUNTIME, "run", "--rm"]
 
     if interactive and sys.stdin.isatty():
         args += ["-it"]

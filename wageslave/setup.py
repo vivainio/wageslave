@@ -110,8 +110,7 @@ def run_setup(host: str | None = None) -> None:
             print("No git user.name/user.email in global config", file=sys.stderr)
             sys.exit(1)
         gitcfg.write_text(
-            f"[user]\n    name = {name}\n    email = {email}\n"
-            f"[safe]\n    directory = /workspace\n"
+            f"[user]\n    name = {name}\n    email = {email}\n[safe]\n    directory = /workspace\n"
         )
         print(f"git: {name} <{email}>")
 
@@ -120,8 +119,8 @@ def run_setup(host: str | None = None) -> None:
     if not dest_hosts.exists():
         print("gh: run 'wageslave gh auth login' to authenticate")
 
-    # Docker image
-    print("docker: building image...")
+    # Container image
+    print("podman: building image...")
     docker.build_image()
 
     print("ready")

@@ -15,33 +15,52 @@ $(pwd)                    ──▶   /workspace (read-write)
 
 Your personal credentials never touch `~/.ssh` or `~/.gitconfig` on the host. They live in `~/.config/wageslave/` and are only mounted into short-lived containers.
 
+## Prerequisites
+
+- Python 3.11+
+- Docker
+- An SSH key for GitHub in `~/.ssh/` with a matching entry in `~/.ssh/config`:
+
+```
+Host github-public
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_github
+```
+
 ## Install
 
 ```bash
-# Requires: Python 3.11+, uv, Docker
-
-git clone <this-repo> ~/tools/wageslave
-cd ~/tools/wageslave
+pip install wageslave
+# or from source:
+git clone https://github.com/vivainio/wageslave.git
+cd wageslave
 uv sync
 ```
 
 ## Setup
 
 ```bash
-# First-time setup (generates SSH key, sets git identity, builds Docker image)
-uv run wageslave setup
-
-# Add the printed public key to GitHub → Settings → SSH keys
-
-# Authenticate gh CLI
-uv run wageslave gh auth login
+wageslave setup
 ```
 
-Or install globally so `wageslave` is on your PATH:
+This auto-detects your existing credentials:
+
+1. **SSH key** — finds the GitHub IdentityFile from `~/.ssh/config`
+2. **Git identity** — reads `user.name` and `user.email` from global git config
+3. **known_hosts** — runs `ssh-keyscan github.com`
+4. **Docker image** — builds the Alpine-based container with git, ssh, and gh
+
+If you have multiple GitHub hosts in `~/.ssh/config`, setup will list them and ask you to pick one:
 
 ```bash
-uv tool install -e ~/tools/wageslave
-wageslave setup
+wageslave setup --host github-public
+```
+
+Then authenticate the GitHub CLI (one-time, opens a browser flow):
+
+```bash
+wageslave gh auth login
 ```
 
 ## Usage
@@ -74,10 +93,6 @@ All config lives in `~/.config/wageslave/` (override with `WAGESLAVE_HOME` env v
 |------|---------|
 | `ssh/id_ed25519` | Personal SSH private key |
 | `ssh/id_ed25519.pub` | Personal SSH public key |
-| `gh/` | gh CLI auth tokens |
-| `gitconfig` | Git user.name and user.email |
-
-## Requirements
-
-- Python 3.11+
-- Docker
+| `ssh/known_hosts` | GitHub host key |
+| `gh/hosts.yml` | gh CLI auth token |
+| `gitconfig` | Git user.name, user.email, safe.directory |
