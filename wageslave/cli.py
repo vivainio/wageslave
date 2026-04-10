@@ -22,7 +22,15 @@ Examples:
 """
 
 
+REMOTE_GIT_COMMANDS = {"push", "pull", "fetch", "clone", "ls-remote"}
+
+
 def cmd_git(args: list[str]) -> int:
+    if args and args[0] not in REMOTE_GIT_COMMANDS:
+        print(
+            f"wageslave: hint: 'git {args[0]}' is local — use plain git instead",
+            file=sys.stderr,
+        )
     config.check_setup()
     docker.ensure_image()
     return docker.run(

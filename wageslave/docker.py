@@ -52,10 +52,14 @@ def run(
         f" -o UserKnownHostsFile={home}/.ssh/known_hosts"
     )
     args: list[str] = [
-        RUNTIME, "run", "--rm",
+        RUNTIME,
+        "run",
+        "--rm",
         "--userns=keep-id",
-        "--env", f"HOME={home}",
-        "--env", f"GIT_SSH_COMMAND={ssh_cmd}",
+        "--env",
+        f"HOME={home}",
+        "--env",
+        f"GIT_SSH_COMMAND={ssh_cmd}",
     ]
 
     if interactive and sys.stdin.isatty():
