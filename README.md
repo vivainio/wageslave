@@ -19,13 +19,11 @@ Your personal credentials never touch `~/.ssh` or `~/.gitconfig` on the host. Th
 
 - Python 3.11+
 - Podman
-- An SSH key for GitHub in `~/.ssh/` with a matching entry in `~/.ssh/config`:
+- An SSH key for GitHub in `~/.ssh/` with a matching entry in `~/.ssh/config`, e.g.:
 
 ```
-Host github-public
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_github
+Host github.com
+    IdentityFile ~/.ssh/id_ed25519
 ```
 
 ## Install
