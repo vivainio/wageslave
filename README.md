@@ -1,6 +1,6 @@
 # wageslave
 
-Use your personal GitHub account from a company computer without installing personal SSH keys or tokens on the host. Everything runs inside a Podman container.
+Many companies restrict using personal GitHub accounts alongside corporate ones on company machines. Wageslave lets you use your personal GitHub safely by isolating your credentials inside a Podman container — your personal SSH keys and tokens never touch the host.
 
 ## How it works
 
