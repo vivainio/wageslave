@@ -55,9 +55,12 @@ Only commands that talk to GitHub need wageslave. Local git commands (`add`, `co
 wageslave gh repo clone youruser/project
 cd project
 
-# Push/pull (needs SSH credentials)
-wageslave git push
-wageslave git pull
+# Pull/fetch — runs on host via HTTPS, no container needed
+wageslave pull
+wageslave fetch
+
+# Push — needs SSH credentials, runs in container
+wageslave push
 
 # GitHub CLI
 wageslave gh repo create my-project --private
