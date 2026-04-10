@@ -19,12 +19,6 @@ Your personal credentials never touch `~/.ssh` or `~/.gitconfig` on the host. Th
 
 - Python 3.11+
 - Podman
-- An SSH key for GitHub in `~/.ssh/` with a matching entry in `~/.ssh/config`, e.g.:
-
-```
-Host github.com
-    IdentityFile ~/.ssh/id_ed25519
-```
 
 ## Install
 
@@ -36,12 +30,13 @@ uv tool install wageslave
 
 ```bash
 wageslave setup
+wageslave gh auth login
 ```
 
-This auto-detects your existing credentials:
+Setup auto-detects existing credentials or creates new ones:
 
-1. **SSH key** — finds the GitHub IdentityFile from `~/.ssh/config`
-2. **Git identity** — reads `user.name` and `user.email` from global git config
+1. **SSH key** — if `~/.ssh/config` has a GitHub entry, copies that key. Otherwise generates a new key pair and prints the public key to add to https://github.com/settings/ssh/new
+2. **Git identity** — reads `user.name` and `user.email` from global git config (uses placeholders if not set — edit `~/.config/wageslave/gitconfig`)
 3. **known_hosts** — runs `ssh-keyscan github.com`
 4. **Podman image** — builds the Alpine-based container with git, ssh, and gh
 
@@ -49,12 +44,6 @@ If you have multiple GitHub hosts in `~/.ssh/config`, setup will list them and a
 
 ```bash
 wageslave setup --host github-public
-```
-
-Then authenticate the GitHub CLI (one-time, opens a browser flow):
-
-```bash
-wageslave gh auth login
 ```
 
 ## Usage
