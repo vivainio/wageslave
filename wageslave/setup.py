@@ -59,10 +59,19 @@ def run_setup(host: str | None = None) -> None:
         github_hosts = parse_github_hosts()
 
         if not github_hosts:
-            print("No github.com entries found in ~/.ssh/config", file=sys.stderr)
-            sys.exit(1)
-
-        if host:
+            print("ssh: no GitHub key found in ~/.ssh/config — generating new key")
+            subprocess.run(
+                ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(dest_key)],
+                check=True,
+            )
+            dest_key.chmod(0o600)
+            pub_text = dest_key.with_suffix(".pub").read_text().strip()
+            print()
+            print("Add this public key to https://github.com/settings/ssh/new")
+            print()
+            print(f"  {pub_text}")
+            print()
+        elif host:
             match = [e for e in github_hosts if e.host == host]
             if not match:
                 names = ", ".join(e.host for e in github_hosts)
@@ -106,9 +115,11 @@ def run_setup(host: str | None = None) -> None:
     if not gitcfg.exists():
         name = _git_config_global("user.name")
         email = _git_config_global("user.email")
-        if not name or not email:
-            print("No git user.name/user.email in global config", file=sys.stderr)
-            sys.exit(1)
+        if not name:
+            name = "wageslave"
+        if not email:
+            email = "wageslave@localhost"
+            print("git: no global config — using placeholder, edit gitconfig")
         gitcfg.write_text(
             f"[user]\n    name = {name}\n    email = {email}\n[safe]\n    directory = /workspace\n"
         )
