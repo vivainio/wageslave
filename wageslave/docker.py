@@ -1,5 +1,6 @@
 """Container management for wageslave (Podman)."""
 
+import hashlib
 import secrets
 import subprocess
 import sys
@@ -12,9 +13,20 @@ from wageslave import config
 IMAGE_NAME = "wageslave"
 RUNTIME = "podman"
 
+SESSION_KEY_PATH = Path("/tmp/wageslave.key")
 
-def _key_path() -> Path:
+
+def _image_key_path() -> Path:
     return config.config_dir() / "image.key"
+
+
+def _combined_key() -> str:
+    """Derive the encryption key from image key + session key."""
+    image_key = _image_key_path().read_text()
+    if not SESSION_KEY_PATH.exists():
+        raise SystemExit("wageslave: locked — run 'wageslave unlock' first")
+    session_key = SESSION_KEY_PATH.read_text()
+    return hashlib.sha256((image_key + session_key).encode()).hexdigest()
 
 
 def image_exists() -> bool:
@@ -28,7 +40,7 @@ def image_exists() -> bool:
 def build_image() -> None:
     """Build image with a random encryption key baked in."""
     key = secrets.token_hex(32)
-    key_path = _key_path()
+    key_path = _image_key_path()
     key_path.parent.mkdir(parents=True, exist_ok=True)
     key_path.write_text(key)
     key_path.chmod(0o600)
@@ -36,10 +48,8 @@ def build_image() -> None:
     dockerfile = files("wageslave").joinpath("Dockerfile")
     pkg_dir = str(dockerfile.parent)
 
-    # Build with the key injected as a build arg
     with tempfile.TemporaryDirectory(prefix="wageslave-build-") as tmp:
         tmp_path = Path(tmp)
-        # Write a Dockerfile that adds the key
         df = tmp_path / "Dockerfile"
         df.write_text(
             (Path(pkg_dir) / "Dockerfile").read_text()
@@ -58,14 +68,13 @@ def ensure_image() -> None:
         build_image()
 
 
-def encrypt_credentials(source_dir: Path) -> None:
-    """Tar and encrypt credentials from source_dir into credentials.enc."""
-    key_path = _key_path()
-    if not key_path.exists():
-        raise SystemExit("wageslave: no encryption key — run 'wageslave setup' first")
+def encrypt_credentials(source_dir: Path, passphrase: str) -> None:
+    """Tar and encrypt credentials using image key + passphrase."""
+    image_key = _image_key_path().read_text()
+    session_key = hashlib.sha256(passphrase.encode()).hexdigest()
+    combined = hashlib.sha256((image_key + session_key).encode()).hexdigest()
 
     enc_path = config.config_dir() / "credentials.enc"
-    # tar the contents, pipe through openssl
     tar = subprocess.run(
         ["tar", "cf", "-", "-C", str(source_dir), "."],
         capture_output=True,
@@ -78,7 +87,7 @@ def encrypt_credentials(source_dir: Path) -> None:
             "-aes-256-cbc",
             "-pbkdf2",
             "-pass",
-            f"file:{key_path}",
+            f"pass:{combined}",
             "-out",
             str(enc_path),
         ],
@@ -89,8 +98,8 @@ def encrypt_credentials(source_dir: Path) -> None:
 
 
 def decrypt_credentials(dest_dir: Path) -> None:
-    """Decrypt credentials.enc into dest_dir."""
-    key_path = _key_path()
+    """Decrypt credentials.enc using combined key."""
+    combined = _combined_key()
     enc_path = config.config_dir() / "credentials.enc"
     if not enc_path.exists():
         raise SystemExit("wageslave: no credentials found — run 'wageslave setup' first")
@@ -103,7 +112,7 @@ def decrypt_credentials(dest_dir: Path) -> None:
             "-d",
             "-pbkdf2",
             "-pass",
-            f"file:{key_path}",
+            f"pass:{combined}",
             "-in",
             str(enc_path),
         ],
@@ -117,6 +126,23 @@ def decrypt_credentials(dest_dir: Path) -> None:
     )
 
 
+def unlock(passphrase: str) -> None:
+    """Write session key derived from passphrase to /tmp."""
+    session_key = hashlib.sha256(passphrase.encode()).hexdigest()
+    SESSION_KEY_PATH.write_text(session_key)
+    SESSION_KEY_PATH.chmod(0o600)
+
+
+def lock() -> None:
+    """Remove session key."""
+    if SESSION_KEY_PATH.exists():
+        SESSION_KEY_PATH.unlink()
+
+
+def is_unlocked() -> bool:
+    return SESSION_KEY_PATH.exists()
+
+
 def credentials_exist() -> bool:
     return (config.config_dir() / "credentials.enc").exists()
 
@@ -125,11 +151,13 @@ def run(
     command: list[str],
     *,
     workdir: Path | None = None,
-    writable_creds: bool = False,
     interactive: bool = True,
     entrypoint: str | None = None,
 ) -> int:
     """Run a command inside the wageslave container."""
+    if not is_unlocked():
+        raise SystemExit("wageslave: locked — run 'wageslave unlock' first")
+
     work = workdir or Path.cwd()
     home = "/home/user"
     ssh_cmd = (
@@ -154,8 +182,9 @@ def run(
     if interactive and sys.stdin.isatty():
         args += ["-it"]
 
-    # Mount encrypted credentials
+    # Mount encrypted credentials + session key
     args += ["-v", f"{enc_path}:/creds/credentials.enc:ro"]
+    args += ["-v", f"{SESSION_KEY_PATH}:/creds/session.key:ro"]
     args += ["-v", f"{work}:/workspace"]
     args += ["--workdir", "/workspace"]
 
@@ -170,10 +199,7 @@ def run(
 
 
 def run_with_writable_creds(command: list[str], interactive: bool = True) -> int:
-    """Run a command that needs to write credentials (e.g. gh auth login).
-
-    Decrypts to a temp dir, mounts it writable, re-encrypts after.
-    """
+    """Run a command that needs to write credentials (e.g. gh auth login)."""
     with tempfile.TemporaryDirectory(prefix="wageslave-creds-") as tmp:
         tmp_path = Path(tmp)
         decrypt_credentials(tmp_path)
@@ -218,7 +244,33 @@ def run_with_writable_creds(command: list[str], interactive: bool = True) -> int
 
         result = subprocess.run(args)
 
-        # Re-encrypt after command completes
-        encrypt_credentials(tmp_path)
+        # Re-encrypt with the current combined key
+        _encrypt_with_combined_key(tmp_path)
 
         return result.returncode
+
+
+def _encrypt_with_combined_key(source_dir: Path) -> None:
+    """Re-encrypt credentials using the current combined key (both parts available)."""
+    combined = _combined_key()
+    enc_path = config.config_dir() / "credentials.enc"
+    tar = subprocess.run(
+        ["tar", "cf", "-", "-C", str(source_dir), "."],
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "openssl",
+            "enc",
+            "-aes-256-cbc",
+            "-pbkdf2",
+            "-pass",
+            f"pass:{combined}",
+            "-out",
+            str(enc_path),
+        ],
+        input=tar.stdout,
+        check=True,
+    )
+    enc_path.chmod(0o600)

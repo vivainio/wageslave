@@ -4,16 +4,11 @@ Many companies restrict using personal GitHub accounts alongside corporate ones 
 
 ## How it works
 
-```
-Host machine                    Podman container
-─────────────                   ─────────────────
-~/.config/wageslave/ssh/  ──▶   ~/.ssh/ (read-only)
-~/.config/wageslave/gh/   ──▶   ~/.config/gh/ (read-only)
-~/.config/wageslave/gitconfig ▶ ~/.gitconfig (read-only)
-$(pwd)                    ──▶   /workspace (read-write)
-```
+Credentials are stored encrypted on disk. The encryption key is split in two:
+- One half is baked into the Podman image
+- The other half is derived from your passphrase at `unlock` time
 
-Your personal credentials never touch `~/.ssh` or `~/.gitconfig` on the host. They live in `~/.config/wageslave/` and are only mounted into short-lived containers.
+Both parts are needed to decrypt. On disk, only an opaque encrypted blob is visible.
 
 ## Prerequisites
 
@@ -29,45 +24,27 @@ uv tool install wageslave
 ## Setup
 
 ```bash
-wageslave setup
-wageslave gh auth login
-wageslave install-skill   # optional: Claude Code skill
+wageslave setup            # asks for passphrase, generates SSH key
+wageslave gh auth login    # authenticate GitHub CLI
+wageslave install-skill    # optional: Claude Code skill
 ```
 
-Setup auto-detects existing credentials or creates new ones:
+Setup will:
+1. Ask for an encryption passphrase
+2. Generate a fresh SSH key pair — add the printed public key to https://github.com/settings/ssh/new
+3. Pick up git identity from global config
+4. Encrypt everything into `~/.config/wageslave/credentials.enc`
+5. Build the Podman image with the other half of the encryption key
 
-1. **SSH key** — if `~/.ssh/config` has a GitHub entry, copies that key. Otherwise generates a new key pair and prints the public key to add to https://github.com/settings/ssh/new
-2. **Git identity** — reads `user.name` and `user.email` from global git config (uses placeholders if not set — edit `~/.config/wageslave/gitconfig`)
-3. **known_hosts** — runs `ssh-keyscan github.com`
-4. **Podman image** — builds the Alpine-based container with git, ssh, and gh
+## Daily use
 
-If you have multiple GitHub hosts in `~/.ssh/config`, setup will list them and ask you to pick one:
+Each session (or after reboot), unlock first:
 
 ```bash
-wageslave setup --host github-public
+wageslave unlock    # asks for passphrase
 ```
 
-## Usage
-
-The two core commands run git and gh inside the container with your personal credentials:
-
-```bash
-wageslave git push origin main
-wageslave gh pr create --title "Add feature"
-```
-
-For common operations there are shortcuts that avoid spinning up a container when possible:
-
-| Command | Container? | Description |
-|---------|-----------|-------------|
-| `wageslave pull` | No | Git pull via HTTPS on host |
-| `wageslave fetch` | No | Git fetch via HTTPS on host |
-| `wageslave push` | Yes | Git push (needs SSH key) |
-| `wageslave git <args>` | Yes | Any git command |
-| `wageslave gh <args>` | Yes | Any GitHub CLI command |
-| `wageslave shell` | Yes | Interactive bash |
-
-### Typical workflow
+Then work normally:
 
 ```bash
 wageslave gh repo clone youruser/project
@@ -82,14 +59,30 @@ wageslave push
 wageslave gh pr create --title "Add feature"
 ```
 
+Lock when done:
+
+```bash
+wageslave lock
+```
+
+### Commands
+
+| Command | Container? | Description |
+|---------|-----------|-------------|
+| `wageslave unlock` | No | Unlock credentials for this session |
+| `wageslave lock` | No | Lock credentials |
+| `wageslave pull` | No | Git pull via HTTPS on host |
+| `wageslave fetch` | No | Git fetch via HTTPS on host |
+| `wageslave push` | Yes | Git push (needs SSH key) |
+| `wageslave git <args>` | Yes | Any git command |
+| `wageslave gh <args>` | Yes | Any GitHub CLI command |
+| `wageslave shell` | Yes | Interactive bash |
+
 ## Configuration
 
-All config lives in `~/.config/wageslave/` (override with `WAGESLAVE_HOME` env var):
+All config lives in `~/.config/wageslave/`:
 
 | Path | Purpose |
 |------|---------|
-| `ssh/id_ed25519` | Personal SSH private key |
-| `ssh/id_ed25519.pub` | Personal SSH public key |
-| `ssh/known_hosts` | GitHub host key |
-| `gh/hosts.yml` | gh CLI auth token |
-| `gitconfig` | Git user.name, user.email, safe.directory |
+| `credentials.enc` | Encrypted SSH key, gh token, git config |
+| `image.key` | Half of the encryption key (other half in Podman image) |

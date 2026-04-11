@@ -1,23 +1,28 @@
 #!/bin/bash
 # Decrypt credentials and run the given command.
-# The encryption key is baked into the image at /etc/wageslave/key.
-# The encrypted tar is mounted at /creds/credentials.enc.
+# Two key parts are needed:
+#   /etc/wageslave/key  — baked into the image at build time
+#   /creds/session.key  — mounted at runtime (from unlock)
+# The combined key is SHA256(image_key + session_key).
 set -eu
 
 HOME_DIR="/home/user"
-KEY_FILE="/etc/wageslave/key"
+IMAGE_KEY="/etc/wageslave/key"
+SESSION_KEY="/creds/session.key"
 CREDS_ENC="/creds/credentials.enc"
 CREDS_DIR="$HOME_DIR/.wageslave-creds"
 
 mkdir -p "$CREDS_DIR"
 
-if [ -f "$CREDS_ENC" ] && [ -f "$KEY_FILE" ]; then
+if [ -f "$CREDS_ENC" ] && [ -f "$IMAGE_KEY" ] && [ -f "$SESSION_KEY" ]; then
+    # Combine both key parts
+    COMBINED=$(cat "$IMAGE_KEY" "$SESSION_KEY" | openssl dgst -sha256 -r | cut -d' ' -f1)
+
     openssl enc -aes-256-cbc -d -pbkdf2 \
-        -in "$CREDS_ENC" -pass "file:$KEY_FILE" \
+        -in "$CREDS_ENC" -pass "pass:$COMBINED" \
         | tar xf - -C "$CREDS_DIR" 2>/dev/null
 
     # Link credentials to expected locations
-    mkdir -p "$HOME_DIR/.ssh" "$HOME_DIR/.config"
     if [ -d "$CREDS_DIR/ssh" ]; then
         rm -rf "$HOME_DIR/.ssh"
         ln -sf "$CREDS_DIR/ssh" "$HOME_DIR/.ssh"

@@ -12,6 +12,8 @@ Usage: wageslave <command> [args...]
 
 Commands:
   setup          First-time setup (SSH key, git config, build image)
+  unlock         Unlock credentials for this session (asks passphrase)
+  lock           Lock credentials (removes session key)
   pull [args]    Git pull via HTTPS (no container needed)
   fetch [args]   Git fetch via HTTPS (no container needed)
   push [args]    Git push via container (needs SSH credentials)
@@ -96,6 +98,33 @@ def cmd_shell() -> int:
     return docker.run([], entrypoint="/bin/bash")
 
 
+def cmd_unlock() -> None:
+    import getpass
+
+    config.check_setup()
+    if docker.is_unlocked():
+        print("Already unlocked")
+        return
+    passphrase = getpass.getpass("Passphrase: ")
+    docker.unlock(passphrase)
+    # Verify by trying to decrypt
+    try:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="wageslave-verify-") as tmp:
+            docker.decrypt_credentials(Path(tmp))
+        print("Unlocked")
+    except subprocess.CalledProcessError:
+        docker.lock()
+        print("Wrong passphrase", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_lock() -> None:
+    docker.lock()
+    print("Locked")
+
+
 def cmd_install_skill() -> None:
     import shutil
     from importlib.resources import files
@@ -108,16 +137,10 @@ def cmd_install_skill() -> None:
     print(f"Installed skill to {dest}")
 
 
-def cmd_setup(args: list[str]) -> None:
+def cmd_setup() -> None:
     from wageslave.setup import run_setup
 
-    host = None
-    if len(args) >= 2 and args[0] == "--host":
-        host = args[1]
-    elif len(args) >= 1 and args[0].startswith("--host="):
-        host = args[0].split("=", 1)[1]
-
-    run_setup(host=host)
+    run_setup()
 
 
 def main() -> None:
@@ -130,7 +153,11 @@ def main() -> None:
     command, rest = args[0], args[1:]
 
     if command == "setup":
-        cmd_setup(rest)
+        cmd_setup()
+    elif command == "unlock":
+        cmd_unlock()
+    elif command == "lock":
+        cmd_lock()
     elif command == "install-skill":
         cmd_install_skill()
     elif command == "pull":
