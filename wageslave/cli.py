@@ -59,15 +59,9 @@ def cmd_pull_or_fetch(git_cmd: str, args: list[str]) -> int:
 
 
 def cmd_push(args: list[str]) -> int:
-    """Git push always needs the container for SSH credentials."""
     config.check_setup()
     docker.ensure_image()
-    return docker.run(
-        ["git", "push", *args],
-        ssh_dir=config.ssh_dir(),
-        gh_dir=config.gh_dir(),
-        gitconfig=config.gitconfig(),
-    )
+    return docker.run(["git", "push", *args])
 
 
 def cmd_git(args: list[str]) -> int:
@@ -78,47 +72,28 @@ def cmd_git(args: list[str]) -> int:
         )
     config.check_setup()
     docker.ensure_image()
-    return docker.run(
-        ["git", *args],
-        ssh_dir=config.ssh_dir(),
-        gh_dir=config.gh_dir(),
-        gitconfig=config.gitconfig(),
-    )
+    return docker.run(["git", *args])
 
 
 def cmd_gh(args: list[str]) -> int:
     config.check_setup()
     docker.ensure_image()
     is_auth = len(args) > 0 and args[0] == "auth"
-    if is_auth:
-        config.gh_dir().mkdir(parents=True, exist_ok=True)
-    # For 'gh auth login', add defaults to reduce noise
     gh_args = list(args)
     if len(args) >= 2 and args[0] == "auth" and args[1] == "login":
         if "--git-protocol" not in args:
             gh_args += ["--git-protocol", "ssh"]
         if "--skip-ssh-key" not in args:
             gh_args += ["--skip-ssh-key"]
-    return docker.run(
-        ["gh", *gh_args],
-        ssh_dir=config.ssh_dir(),
-        gh_dir=config.gh_dir(),
-        gitconfig=config.gitconfig(),
-        writable_gh=is_auth,
-        writable_gitconfig=is_auth,
-    )
+    if is_auth:
+        return docker.run_with_writable_creds(["gh", *gh_args])
+    return docker.run(["gh", *gh_args])
 
 
 def cmd_shell() -> int:
     config.check_setup()
     docker.ensure_image()
-    return docker.run(
-        [],
-        ssh_dir=config.ssh_dir(),
-        gh_dir=config.gh_dir(),
-        gitconfig=config.gitconfig(),
-        entrypoint="/bin/bash",
-    )
+    return docker.run([], entrypoint="/bin/bash")
 
 
 def cmd_install_skill() -> None:

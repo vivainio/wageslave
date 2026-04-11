@@ -3,6 +3,7 @@
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -45,17 +46,24 @@ def parse_github_hosts() -> list[SshHostEntry]:
 
 
 def run_setup(host: str | None = None) -> None:
-    ssh = config.ssh_dir()
-    gh = config.gh_dir()
-    gitcfg = config.gitconfig()
+    cfg = config.config_dir()
+    cfg.mkdir(parents=True, exist_ok=True)
 
-    ssh.mkdir(parents=True, exist_ok=True)
-    ssh.chmod(0o700)
-    gh.mkdir(parents=True, exist_ok=True)
+    # Build image first (generates encryption key)
+    print("podman: building image...")
+    docker.build_image()
 
-    # SSH key — find from ~/.ssh/config
-    dest_key = ssh / "id_ed25519"
-    if not dest_key.exists():
+    # Collect credentials in a temp dir, then encrypt
+    with tempfile.TemporaryDirectory(prefix="wageslave-setup-") as tmp:
+        tmp_path = Path(tmp)
+        ssh = tmp_path / "ssh"
+        gh = tmp_path / "gh"
+        ssh.mkdir()
+        ssh.chmod(0o700)
+        gh.mkdir()
+
+        # SSH key — find from ~/.ssh/config
+        dest_key = ssh / "id_ed25519"
         github_hosts = parse_github_hosts()
 
         if not github_hosts:
@@ -71,38 +79,38 @@ def run_setup(host: str | None = None) -> None:
             print()
             print(f"  {pub_text}")
             print()
-        elif host:
-            match = [e for e in github_hosts if e.host == host]
-            if not match:
-                names = ", ".join(e.host for e in github_hosts)
-                print(f"Host '{host}' not found. Available: {names}", file=sys.stderr)
-                sys.exit(1)
-            entry = match[0]
-        elif len(github_hosts) == 1:
-            entry = github_hosts[0]
         else:
-            print("Multiple GitHub hosts found in ~/.ssh/config:", file=sys.stderr)
-            for e in github_hosts:
-                key_name = e.identity_file.name if e.identity_file else "?"
-                print(f"  {e.host:20s} → {key_name}", file=sys.stderr)
-            print("\nRe-run with: wageslave setup --host <name>", file=sys.stderr)
-            sys.exit(1)
+            if host:
+                match = [e for e in github_hosts if e.host == host]
+                if not match:
+                    names = ", ".join(e.host for e in github_hosts)
+                    print(f"Host '{host}' not found. Available: {names}", file=sys.stderr)
+                    sys.exit(1)
+                entry = match[0]
+            elif len(github_hosts) == 1:
+                entry = github_hosts[0]
+            else:
+                print("Multiple GitHub hosts found in ~/.ssh/config:", file=sys.stderr)
+                for e in github_hosts:
+                    key_name = e.identity_file.name if e.identity_file else "?"
+                    print(f"  {e.host:20s} → {key_name}", file=sys.stderr)
+                print("\nRe-run with: wageslave setup --host <name>", file=sys.stderr)
+                sys.exit(1)
 
-        if not entry.identity_file or not entry.identity_file.exists():
-            print(f"IdentityFile for '{entry.host}' not found", file=sys.stderr)
-            sys.exit(1)
+            if not entry.identity_file or not entry.identity_file.exists():
+                print(f"IdentityFile for '{entry.host}' not found", file=sys.stderr)
+                sys.exit(1)
 
-        src = entry.identity_file
-        shutil.copy2(src, dest_key)
-        dest_key.chmod(0o600)
-        pub = src.with_suffix(".pub")
-        if pub.exists():
-            shutil.copy2(pub, dest_key.with_suffix(".pub"))
-        print(f"ssh: copied {src.name} (from Host {entry.host})")
+            src = entry.identity_file
+            shutil.copy2(src, dest_key)
+            dest_key.chmod(0o600)
+            pub = src.with_suffix(".pub")
+            if pub.exists():
+                shutil.copy2(pub, dest_key.with_suffix(".pub"))
+            print(f"ssh: copied {src.name} (from Host {entry.host})")
 
-    # GitHub known_hosts — mounted ssh dir replaces the baked-in one
-    known_hosts = ssh / "known_hosts"
-    if not known_hosts.exists():
+        # GitHub known_hosts
+        known_hosts = ssh / "known_hosts"
         subprocess.run(
             ["ssh-keyscan", "github.com"],
             stdout=open(known_hosts, "w"),
@@ -111,8 +119,8 @@ def run_setup(host: str | None = None) -> None:
         )
         print("ssh: added github.com to known_hosts")
 
-    # Git identity
-    if not gitcfg.exists():
+        # Git identity
+        gitcfg = tmp_path / "gitconfig"
         name = _git_config_global("user.name")
         email = _git_config_global("user.email")
         if not name:
@@ -125,16 +133,27 @@ def run_setup(host: str | None = None) -> None:
         )
         print(f"git: {name} <{email}>")
 
-    # gh CLI auth — user must run `wageslave gh auth login` manually
-    dest_hosts = gh / "hosts.yml"
-    if not dest_hosts.exists():
-        print("gh: run 'wageslave gh auth login' to authenticate")
+        # Encrypt everything
+        docker.encrypt_credentials(tmp_path)
+        print("credentials: encrypted")
 
-    # Container image
-    print("podman: building image...")
-    docker.build_image()
+    # Clean up any old plaintext credentials
+    _remove_old_plaintext()
 
-    print("ready")
+    print()
+    print("ready — run 'wageslave gh auth login' to authenticate")
+
+
+def _remove_old_plaintext() -> None:
+    """Remove plaintext credentials from earlier wageslave versions."""
+    cfg = config.config_dir()
+    for name in ["ssh", "gh"]:
+        d = cfg / name
+        if d.is_dir():
+            shutil.rmtree(d)
+    f = cfg / "gitconfig"
+    if f.is_file():
+        f.unlink()
 
 
 def _git_config_global(key: str) -> str | None:

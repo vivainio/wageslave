@@ -21,6 +21,6 @@ def gitconfig() -> Path:
 
 
 def check_setup() -> None:
-    d = ssh_dir()
-    if not d.is_dir():
-        raise SystemExit(f"wageslave: SSH keys not found at {d} — run 'wageslave setup' first")
+    enc = config_dir() / "credentials.enc"
+    if not enc.exists():
+        raise SystemExit("wageslave: not configured — run 'wageslave setup' first")
